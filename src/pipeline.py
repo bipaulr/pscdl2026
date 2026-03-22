@@ -17,7 +17,7 @@ from typing import Optional
 @dataclass
 class Config:
     baseline_frames: int = 150       # How many frames to use for BG modelling
-    persist_thresh: int = 20         # Frames a change must persist to count
+    persist_thresh: int = 10         # Frames a change must persist to count
     diff_threshold: float = 30.0     # Pixel diff threshold (0-255)
     morph_kernel: int = 5            # Morphological op kernel size
     min_blob_area: int = 500         # Ignore tiny noise blobs (px²)
