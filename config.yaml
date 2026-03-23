@@ -1,0 +1,31 @@
+# PSCDL 2026 — Pipeline Configuration
+# All tunable parameters in one place
+
+pipeline:
+  baseline_frames: 150      # frames used to build background model
+  persist_thresh: 10        # min consecutive frames for persistent change
+  diff_threshold: 30.0      # pixel diff threshold vs background median
+  morph_kernel: 5           # morphological op kernel size
+  min_blob_area: 500        # minimum blob size in pixels to keep
+  use_clahe: true           # CLAHE illumination normalization
+
+background:
+  gmm_history: 200
+  gmm_var_threshold: 16.0
+  gmm_detect_shadows: false
+
+sam:
+  checkpoint: models/sam_vit_b.pth
+  model_type: vit_b
+
+grounding_dino:
+  checkpoint: models/groundingdino_swint_ogc.pth
+  config: models/GroundingDINO_SwinT_OGC.py
+  text_prompt: "bag . box . object . debris . luggage . package"
+  box_threshold: 0.3
+  text_threshold: 0.25
+
+evaluation:
+  video_dir: data/videos
+  gt_dir: data/masks
+  output_dir: outputs/predictions

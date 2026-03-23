@@ -3,11 +3,20 @@ import numpy as np
 from pathlib import Path
 from utils.metrics import evaluate
 
+def apply_clahe(frame):
+    """Apply CLAHE histogram equalization to normalize illumination."""
+    lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    l = clahe.apply(l)
+    lab = cv2.merge([l, a, b])
+    return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+
 
 def run_pipeline_on_video(video_path: str, baseline_frames: int = 150,
                            persist_thresh: int = 10, diff_threshold: float = 30.0,
-                           morph_kernel: int = 5, min_blob_area: int = 500) -> np.ndarray:
-    """Run full pipeline on one video, return final binary mask."""
+                           morph_kernel: int = 5, min_blob_area: int = 500,
+                           use_clahe: bool = True) -> np.ndarray:
     cap = cv2.VideoCapture(video_path)
     frames = []
     while True:
@@ -18,22 +27,25 @@ def run_pipeline_on_video(video_path: str, baseline_frames: int = 150,
     cap.release()
 
     if len(frames) <= baseline_frames:
-        print(f"Warning: video too short ({len(frames)} frames)")
         h, w = frames[0].shape[:2]
         return np.zeros((h, w), dtype=np.uint8)
+
+    if use_clahe:
+        frames = [apply_clahe(f) for f in frames]
 
     baseline    = frames[:baseline_frames]
     eval_frames = frames[baseline_frames:]
     h, w        = eval_frames[0].shape[:2]
 
-    # Background model
+    # MOG2
     mog2 = cv2.createBackgroundSubtractorMOG2(
         history=200, varThreshold=16.0, detectShadows=False
     )
     for frame in baseline:
         mog2.apply(frame)
 
-    bg_mean = np.mean(
+    # Temporal median background — more robust than mean for illumination shifts
+    bg_median = np.median(
         [f.astype(np.float32) for f in baseline], axis=0
     ).astype(np.uint8)
 
@@ -43,15 +55,16 @@ def run_pipeline_on_video(video_path: str, baseline_frames: int = 150,
     for frame in eval_frames:
         fg = mog2.apply(frame)
         _, fg = cv2.threshold(fg, 200, 255, cv2.THRESH_BINARY)
-        diff = cv2.absdiff(frame, bg_mean)
+
+        diff = cv2.absdiff(frame, bg_median)
         diff_gray = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
         _, fg_diff = cv2.threshold(diff_gray, diff_threshold, 255, cv2.THRESH_BINARY)
+
         combined = cv2.bitwise_and(fg, fg_diff)
         active = (combined > 0).astype(np.int32)
         counter = (counter + active) * active
         filtered.append((counter >= persist_thresh).astype(np.uint8) * 255)
 
-    # Union mask
     union = np.zeros((h, w), dtype=np.uint8)
     for m in filtered:
         union = cv2.bitwise_or(union, m)
